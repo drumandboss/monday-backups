@@ -16,6 +16,10 @@ jobs:
       - name: Check out repository code
         uses: actions/checkout@v4
 
+      # THIS IS THE NEW STEP TO DEBUG THE ISSUE
+      - name: Display Script Contents
+        run: cat backup_script.py
+
       - name: Authenticate to Google Cloud
         id: auth
         uses: 'google-github-actions/auth@v2'
