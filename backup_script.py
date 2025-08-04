@@ -28,36 +28,23 @@ def get_all_boards():
         return []
 
 def get_board_data(board_id):
-    """Fetches all items and column structures for a given board ID."""
-    # Get column titles first
-    column_query = f'{{ boards(ids: {board_id}) {{ columns {{ id title }} }} }}'
-    try:
-        response = requests.post(MONDAY_API_URL, json={'query': column_query}, headers=HEADERS)
-        response.raise_for_status()
-        columns_data = response.json()['data']['boards'][0]['columns']
-        column_map = {c['id']: c['title'] for c in columns_data}
-    except Exception as e:
-        print(f"Error fetching columns for board {board_id}: {e}")
-        return None
-
-    # --- THIS IS THE CORRECTED PART ---
-    # Use a simpler query for items that is more compatible.
-    # We set a high limit to get all items, as this method doesn't use pagination.
+    """DIAGNOSTIC VERSION: Fetches only item ID and name for a given board ID."""
+    
+    # --- THIS IS THE DIAGNOSTIC PART ---
+    # This query is the simplest possible request for items.
+    # It does NOT ask for any column_values.
     items_query = f'''
     {{
       boards(ids: {board_id}) {{
-        items(limit: 1000) {{
+        items(limit: 5000) {{
           id
           name
-          column_values {{
-            id
-            text
-          }}
         }}
       }}
     }}
     '''
     try:
+        print("Attempting simplified item query...")
         response = requests.post(MONDAY_API_URL, json={'query': items_query}, headers=HEADERS)
         response.raise_for_status()
         result = response.json()
@@ -65,6 +52,7 @@ def get_board_data(board_id):
             print(f"Monday API Error: {result['errors']}")
             return None
         items_data = result['data']['boards'][0]['items']
+        print(f"Successfully fetched {len(items_data)} items (ID and Name only).")
     except requests.exceptions.RequestException as e:
         print(f"Error fetching items for board {board_id}: {e}")
         return None
@@ -72,10 +60,8 @@ def get_board_data(board_id):
     # Process items into a list of dictionaries for the CSV
     processed_rows = []
     for item in items_data:
+        # We are only processing the name and ID.
         row = {'Item ID': item['id'], 'Item Name': item['name']}
-        for col_val in item['column_values']:
-            column_title = column_map.get(col_val['id'], col_val['id']) # Use title, fallback to ID
-            row[column_title] = col_val['text']
         processed_rows.append(row)
         
     return processed_rows
@@ -118,7 +104,7 @@ def main():
         board_data = get_board_data(board_id)
         if board_data:
             safe_board_name = re.sub(r'[\\/*?:"<>|]', "", board_name)
-            filename = f"{safe_board_name}.csv"
+            filename = f"{safe_board_name} (Basic).csv"
             df = pd.DataFrame(board_data)
             df.to_csv(filename, index=False, encoding='utf-8-sig')
             print(f"Created CSV file: {filename} with {len(df)} rows.")
