@@ -29,6 +29,7 @@ def get_all_boards():
 
 def get_board_data(board_id):
     """Fetches all items and column structures for a given board ID."""
+    # Get column titles first
     column_query = f'{{ boards(ids: {board_id}) {{ columns {{ id title }} }} }}'
     try:
         response = requests.post(MONDAY_API_URL, json={'query': column_query}, headers=HEADERS)
@@ -39,51 +40,44 @@ def get_board_data(board_id):
         print(f"Error fetching columns for board {board_id}: {e}")
         return None
 
-    items_data = []
-    page = 1
-    while True:
-        items_query = f'''
-        {{
-          boards(ids: {board_id}) {{
-            items_page(limit: 100, page: {page}) {{
-              cursor
-              items {{
-                id
-                name
-                column_values {{
-                  id
-                  text
-                }}
-              }}
-            }}
+    # --- THIS IS THE CORRECTED PART ---
+    # Use a simpler query for items that is more compatible.
+    # We set a high limit to get all items, as this method doesn't use pagination.
+    items_query = f'''
+    {{
+      boards(ids: {board_id}) {{
+        items(limit: 1000) {{
+          id
+          name
+          column_values {{
+            id
+            text
           }}
         }}
-        '''
-        try:
-            response = requests.post(MONDAY_API_URL, json={'query': items_query}, headers=HEADERS)
-            response.raise_for_status()
-            result = response.json()
-            if "errors" in result:
-                print(f"Monday API Error: {result['errors']}")
-                break
-            current_items = result['data']['boards'][0]['items_page']['items']
-            if not current_items:
-                break
-            items_data.extend(current_items)
-            if result['data']['boards'][0]['items_page']['cursor'] is None:
-                break
-            page += 1
-        except requests.exceptions.RequestException as e:
-            print(f"Error fetching items for board {board_id} on page {page}: {e}")
+      }}
+    }}
+    '''
+    try:
+        response = requests.post(MONDAY_API_URL, json={'query': items_query}, headers=HEADERS)
+        response.raise_for_status()
+        result = response.json()
+        if "errors" in result:
+            print(f"Monday API Error: {result['errors']}")
             return None
+        items_data = result['data']['boards'][0]['items']
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching items for board {board_id}: {e}")
+        return None
 
+    # Process items into a list of dictionaries for the CSV
     processed_rows = []
     for item in items_data:
         row = {'Item ID': item['id'], 'Item Name': item['name']}
         for col_val in item['column_values']:
-            column_title = column_map.get(col_val['id'], col_val['id'])
+            column_title = column_map.get(col_val['id'], col_val['id']) # Use title, fallback to ID
             row[column_title] = col_val['text']
         processed_rows.append(row)
+        
     return processed_rows
 
 def upload_to_gdrive(service, file_path, folder_id):
